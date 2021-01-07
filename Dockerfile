@@ -57,4 +57,16 @@ RUN set -ex \
     && python3 -m venv --system-site-packages venv \
     && echo "source ~/venv/bin/activate" >> .bashrc
 
+# Compile ops into venv
+WORKDIR /tmp/stylegan2-pytorch-ops
+
+COPY . .
+
+RUN set -ex \
+    && . /home/$user/venv/bin/activate \
+    && pip install . \
+    && deactivate
+
+WORKDIR /home/$user
+
 CMD ["/bin/bash"]
