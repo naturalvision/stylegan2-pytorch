@@ -1,6 +1,6 @@
 #
-# docker build --build-arg uid=$UID --build-arg user=$LOGNAME -t stylegan2-pytorch-$LOGNAME .
-# docker run --gpus all -u $UID:$UID -v $PWD:$PWD -w $PWD -t -i stylegan2-pytorch-$LOGNAME
+# docker build -t stylegan2-pytorch .
+# docker run --gpus all -u $UID:$UID -v $PWD:$PWD -w $PWD -t -i stylegan2-pytorch
 #
 # python generate.py --ckpt /app/data/stylegan2-ffhq-config-f.pt --pics 10
 #
@@ -24,14 +24,15 @@ RUN set -ex \
 
 RUN set -ex \
     && python3 -m pip install \
-        joblib==0.16.0 \
+        IPython==7.16.1 \
+        lmdb==1.0.0 \
         ninja==1.10.0.post2 \
-        matplotlib==3.3.2 \
-        scikit-learn==0.23.2 \
-        scipy==1.5.2 \
-        tqdm==4.49.0
+        scikit-image==0.17.2 \
+        scipy==1.5.4 \
+        tqdm==4.55.1 \
+        wandb==0.10.12
 
-# Download weights
+# Download StyleGAN2 weights
 WORKDIR /app/data
 
 COPY ./download_weights.sh .
@@ -41,32 +42,43 @@ RUN set -ex \
 
 ENV DATADIR=/app/data
 
-# Add user (override with --build-arg)
-ARG uid=1000
-ARG user=dockeruser
-
-RUN set -ex \
-    && groupadd -g $uid $user \
-    && useradd -g $uid -u $uid -l -m $user
-
-# Create venv
-USER $user
-WORKDIR /home/$user
-
-RUN set -ex \
-    && python3 -m venv --system-site-packages venv \
-    && echo "source ~/venv/bin/activate" >> .bashrc
-
-# Compile ops into venv
-WORKDIR /tmp/stylegan2-pytorch-ops
+# Compile CUDA ops
+WORKDIR /tmp/stylegan2-pytorch
 
 COPY . .
 
 RUN set -ex \
-    && . /home/$user/venv/bin/activate \
-    && pip install . \
-    && deactivate
+    && python3 -m pip install .
 
-WORKDIR /home/$user
+# Download additional weights
+ENV TORCH_HOME=/app/torch
+
+RUN set -ex \
+    && python3 -c 'import lpips; lpips.PerceptualLoss(model="net-lin", net="vgg")' \
+    && python3 -c 'import lpips; lpips.PerceptualLoss(model="net-lin", net="alex")' \
+    && python3 -c 'import lpips; lpips.PerceptualLoss(model="net-lin", net="squeeze")' \
+    && python3 -c 'import inception; inception.fid_inception_v3()' \
+    && python3 -c 'import torchvision; torchvision.models.inception_v3(pretrained=True)' \
+    && chmod a+r $TORCH_HOME/hub/checkpoints/*
+
+# Make python command available
+RUN set -ex \
+    && ln -s $(readlink /usr/bin/python3) /usr/bin/python
+
+# Replace default bashrc because we have no users
+RUN set -ex \
+    && echo '\
+[ -z "$PS1" ] && return\n\
+shopt -s checkwinsize\n\
+PS1="\h:\w\$ "\n\
+eval "$(dircolors -b)"\n\
+alias ls="ls --color=auto"\n\
+alias ll="ls -alF"\n\
+alias la="ls -A"\n\
+alias l="ls -CF"\n\
+alias grep="grep --color=auto"\n\
+' > /etc/bash.bashrc
+
+WORKDIR /
 
 CMD ["/bin/bash"]

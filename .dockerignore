@@ -33,3 +33,5 @@
 **/*.zip
 /sample
 /data
+/work
+/Dockerfile*
