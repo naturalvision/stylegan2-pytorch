@@ -82,6 +82,9 @@ if __name__ == "__main__":
         "--ckpt", type=str, required=True, help="path to the model checkpoint"
     )
     parser.add_argument(
+        "--out", type=str, help="where to put projected images"
+    )
+    parser.add_argument(
         "--size", type=int, default=256, help="output image sizes of the generator"
     )
     parser.add_argument(
@@ -226,8 +229,12 @@ if __name__ == "__main__":
     img_gen, _ = g_ema([latent_path[-1]], input_is_latent=True, noise=noises)
 
     filename = os.path.splitext(os.path.basename(args.files[0]))[0] + ".pt"
+    filename = os.path.join(args.out, filename)
 
     img_ar = make_image(img_gen)
+
+    if args.out:
+        os.makedirs(args.out, exist_ok=True)
 
     result_file = {}
     for i, input_name in enumerate(args.files):
@@ -242,6 +249,7 @@ if __name__ == "__main__":
         }
 
         img_name = os.path.splitext(os.path.basename(input_name))[0] + "-project.png"
+        img_name = os.path.join(args.out, img_name)
         pil_img = Image.fromarray(img_ar[i])
         pil_img.save(img_name)
 
